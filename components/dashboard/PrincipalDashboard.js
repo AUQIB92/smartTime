@@ -189,6 +189,9 @@ export default function PrincipalDashboard({ user }) {
       // Log a sample entry to debug
       if (data.timetables.length > 0) {
         console.log('Sample timetable entry:', data.timetables[0]);
+        console.log('Teacher data in entry:', data.timetables[0].teacher);
+        console.log('Subject data in entry:', data.timetables[0].subject);
+        console.log('Classroom data in entry:', data.timetables[0].classroom);
       }
       
       setTimetableEntries(data.timetables);
@@ -491,24 +494,36 @@ export default function PrincipalDashboard({ user }) {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {entries.map(entry => {
                           try {
-                            // Get related data
-                            const teacher = getTeacherById(entry.teacher);
-                            const subject = getSubjectById(entry.subject);
-                            const classroom = getClassroomById(entry.classroom);
-                            const department = getDepartmentById(entry.department);
+                            // Check if data is already populated by the API
+                            const teacherName = entry.teacher?.name || getTeacherById(entry.teacher)?.name || `Teacher (ID: ${typeof entry.teacher === 'string' ? entry.teacher.slice(-4) : 'Unknown'})`;
+                            const subjectName = entry.subject?.name || getSubjectById(entry.subject)?.name || `Subject (ID: ${typeof entry.subject === 'string' ? entry.subject.slice(-4) : 'Unknown'})`;
+                            const classroomName = entry.classroom?.name || getClassroomById(entry.classroom)?.name || `Room (ID: ${typeof entry.classroom === 'string' ? entry.classroom.slice(-4) : 'Unknown'})`;
+                            
+                            // Get department - might need to look up from teacher or use local array
+                            let departmentName = 'Unknown Department';
+                            if (entry.department) {
+                              departmentName = typeof entry.department === 'object' && entry.department.name 
+                                ? entry.department.name 
+                                : getDepartmentById(entry.department)?.name || `Dept (ID: ${typeof entry.department === 'string' ? entry.department.slice(-4) : 'Unknown'})`;
+                            } else if (entry.teacher && typeof entry.teacher === 'object' && entry.teacher.department) {
+                              departmentName = typeof entry.teacher.department === 'object' && entry.teacher.department.name
+                                ? entry.teacher.department.name
+                                : getDepartmentById(entry.teacher.department)?.name || `Dept (ID: ${typeof entry.teacher.department === 'string' ? entry.teacher.department.slice(-4) : 'Unknown'})`;
+                            }
+                            
                             const classType = getClassTypeLabel(entry.startTime, entry.endTime);
-                            const color = getClassColor(entry.subject);
+                            const color = getClassColor(typeof entry.subject === 'string' ? entry.subject : entry.subject?._id);
                             
                             // Debug logging
                             console.log('Entry data:', {
-                              teacherId: entry.teacher,
-                              teacher: teacher,
-                              subjectId: entry.subject,
-                              subject: subject,
-                              classroomId: entry.classroom,
-                              classroom: classroom,
-                              departmentId: entry.department,
-                              department: department
+                              teacher: entry.teacher,
+                              teacherName,
+                              subject: entry.subject,
+                              subjectName,
+                              classroom: entry.classroom,
+                              classroomName,
+                              department: entry.department,
+                              departmentName
                             });
                             
                             return (
@@ -518,17 +533,13 @@ export default function PrincipalDashboard({ user }) {
                               >
                                 <div className="flex items-start justify-between">
                                   <div>
-                                    <p className="font-medium">
-                                      {teacher?.name || `Teacher (ID: ${entry.teacher?.slice(-4) || 'Unknown'})`}
-                                    </p>
-                                    <p className="text-xs mt-1 font-medium">
-                                      {subject?.name || `Subject (ID: ${entry.subject?.slice(-4) || 'Unknown'})`}
-                                    </p>
+                                    <p className="font-medium">{teacherName}</p>
+                                    <p className="text-xs mt-1 font-medium">{subjectName}</p>
                                     <p className="text-xs mt-1">
-                                      {classroom?.name || `Room (ID: ${entry.classroom?.slice(-4) || 'Unknown'})`} • {classType}
+                                      {classroomName} • {classType}
                                     </p>
                                     <p className="text-xs mt-1 text-gray-600">
-                                      {department?.name || `Dept (ID: ${entry.department?.slice(-4) || 'Unknown'})`}
+                                      {departmentName}
                                     </p>
                                   </div>
                                   <div className="text-xs text-right">
@@ -631,12 +642,19 @@ export default function PrincipalDashboard({ user }) {
     
     try {
       // Handle null, undefined, or non-string subjectId
-      if (!subjectId || typeof subjectId !== 'string') {
+      if (!subjectId) {
         return colors[0]; // Default to first color
       }
       
+      // If subjectId is an object, try to get the _id property
+      const idToUse = typeof subjectId === 'object' ? subjectId._id : subjectId;
+      
+      if (!idToUse || typeof idToUse !== 'string') {
+        return colors[0];
+      }
+      
       // Use last character of ID to select a color
-      const colorIndex = parseInt(subjectId.slice(-1), 16) % colors.length || 0;
+      const colorIndex = parseInt(idToUse.slice(-1), 16) % colors.length || 0;
       return colors[colorIndex];
     } catch (error) {
       console.error('Error generating class color:', error);
